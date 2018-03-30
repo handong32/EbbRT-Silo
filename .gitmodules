@@ -1,0 +1,4 @@
+[submodule "src/masstree"]
+	path = src/masstree
+	url = https://github.com/handong32/masstree-beta.git
+	branch = build_for_ebbrt
