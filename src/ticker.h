@@ -10,10 +10,12 @@
 #include "lockguard.h"
 
 #include <ebbrt/Cpu.h>
+#include <ebbrt/Debug.h>
 #include <ebbrt/native/Clock.h>
 #include <ebbrt/EventManager.h>
+#include <ebbrt/Timer.h>
 
-class ticker {
+class ticker {//: public ebbrt::Timer::Hook {
 public:
 
 #ifdef CHECK_INVARIANTS
@@ -25,7 +27,8 @@ public:
   ticker()
     : current_tick_(1), last_tick_inclusive_(0)
   {
-    ebbrt::kprintf_force("In %s\n", __FUNCTION__);
+    ebbrt::kprintf_force("In %s, tick_us=%ld\n", __FUNCTION__, tick_us);
+
     auto nts = ebbrt::Cpu::Count();
     auto tid = static_cast<size_t>(nts-1);
 
@@ -34,7 +37,12 @@ public:
       ebbrt::kprintf_force("SpawnRemote tickerloop in core %d\n", static_cast<int>(ebbrt::Cpu::GetMine()));
       this->tickerloop();
     }, tid);
-    
+
+    //auto timeout = std::chrono::seconds(1);
+    //ebbrt::timer->Start(*this, timeout, true);
+  
+    //auto timeout = std::chrono::microseconds(tick_us);
+    //timer->Start(*this, timeout, true);
     //ebbrt::kabort("In ticker()\n");
     // TODOH
     //std::thread thd(&ticker::tickerloop, this);
@@ -42,6 +50,8 @@ public:
     
   }
 
+  //void Fire() override;
+  
   inline uint64_t
   global_current_tick() const
   {
@@ -198,6 +208,26 @@ private:
   tickerloop()
   {
     // runs as daemon
+    // bump the current tick
+    // XXX: ignore overflow
+    /*const uint64_t last_tick = util::non_atomic_fetch_add(current_tick_, 1UL);
+    const uint64_t cur_tick  = last_tick + 1;
+    
+    // wait for all threads to finish the last tick
+    for (size_t i = 0; i < ticks_.size(); i++) {
+      tickinfo &ti = ticks_[i];
+      const uint64_t thread_cur_tick =
+	ti.current_tick_.load(std::memory_order_acquire);
+      INVARIANT(thread_cur_tick == last_tick ||
+		thread_cur_tick == cur_tick);
+      if (thread_cur_tick == cur_tick)
+	continue;
+      lock_guard<spinlock> lg(ti.lock_);
+      ti.current_tick_.store(cur_tick, std::memory_order_release);
+    }
+    
+    last_tick_inclusive_.store(last_tick, std::memory_order_release);
+    */
     util::timer loop_timer;
     //struct timespec t;
     for (;;) {

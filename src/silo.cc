@@ -32,6 +32,8 @@
 #include "benchmarks/kvdb_wrapper.h"
 #include "benchmarks/kvdb_wrapper_impl.h"
 
+//#include "alarm.h"
+
 using namespace std;
 using namespace util;
 
@@ -65,8 +67,18 @@ parse_memory_spec(const string &s)
 }
 
 void AppMain() {
-  auto cmdline = std::string(ebbrt::multiboot::CmdLine());
-  KPRINTF("Silo main, args: %s\n", cmdline.c_str());
+  //auto cmdline = std::string(ebbrt::multiboot::CmdLine());
+  //KPRINTF("Silo main, args: %s\n", cmdline.c_str());
+  KPRINTF("Silo main start\n");
+
+  /*for (uint32_t i = 0; i < 16; i++) {
+  ebbrt::event_manager->SpawnRemote(
+    [i] () mutable {
+      auto alrm = new Alarm(49159);
+      alrm->enable_timer();
+      printf("******* Alarm started on core %u\n", i);
+    }, i);
+    }*/
   
   abstract_db *db = NULL;
   void (*test_fn)(abstract_db *) = NULL;
@@ -84,15 +96,18 @@ void AppMain() {
   vector<string> logfiles;
   vector<vector<unsigned>> assignments;
 
-  std::vector<std::string> strs;
+  /*std::vector<std::string> strs;
   boost::split(strs, cmdline, boost::is_any_of(" "));
   int argc = strs.size();
   char **argv = (char **) malloc (argc * sizeof(char **));
   for(int i = 0; i < argc; i ++)
   {
     argv[i] = (char*)strs[i].c_str();
-  }
-    
+    }*/
+  int argc = 8;
+  char *argv[argc] = {"silo.elf32", "--verbose", "--bench", "tpcc", "--num-threads", "15", "--scale-factor", "15"};
+
+  
   while (1) {
     static struct option long_options[] =
     {

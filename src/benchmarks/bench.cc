@@ -29,11 +29,11 @@ extern "C" int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp
 using namespace std;
 using namespace util;
 
-size_t nthreads = 1;
+size_t nthreads = 15;
 volatile bool running = true;
 int verbose = 0;
 uint64_t txn_flags = 0;
-double scale_factor = 1.0;
+double scale_factor = 15.0;
 uint64_t runtime = 30;
 uint64_t ops_per_worker = 0;
 int run_mode = RUNMODE_TIME;
@@ -152,8 +152,13 @@ bench_worker::run()
       }
       d -= workload[i].frequency;
     }
+
+    /*if((mycount % 10000) == 1) {
+      KPRINTF("mycount = %u\n", mycount);
+      }*/
     
-    if (mycount > 2555555) {
+    if (mycount > 1000000) {
+    //if (mycount > 10000) {
       myrunning = false;
     }
   }
@@ -224,7 +229,7 @@ bench_runner::run()
        it != workers.end(); ++it) {
     ebbrt::event_manager->SpawnRemote([&context, &count, mainCPU, it]() {
 	int mycpu = static_cast<int>(ebbrt::Cpu::GetMine());
-	//KPRINTF("running on cpu: %d\n", mycpu);
+	KPRINTF("running on cpu: %d\n", mycpu);
 	
 	(*it)->start();
 	count ++;
@@ -267,7 +272,7 @@ bench_runner::run()
 
   // various sanity checks
   ALWAYS_ASSERT(get<0>(persisted_info) == get<1>(persisted_info));
-  // not == b/c persisted_info does not count read-only txns
+   // not == b/c persisted_info does not count read-only txns
   ALWAYS_ASSERT(n_commits >= get<1>(persisted_info));
 
   const double elapsed_nosync_sec = double(elapsed_nosync) / 1000000.0;
