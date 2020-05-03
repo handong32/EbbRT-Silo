@@ -2225,4 +2225,7 @@ tpcc_do_test(abstract_db *db)
 
   tpcc_bench_runner r(db);
   r.run();
+  KPRINTF("*** tpcc_bench_runner finished returning \n");
+
+  return;
 }

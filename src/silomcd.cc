@@ -19,70 +19,16 @@
 #include <string>
 #include <set>
 
-#include <getopt.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include "Memcached.h"
 
-#include <boost/algorithm/string.hpp>
+#define MCDPORT 11211
 
-#include "allocator.h"
-#include "benchmarks/bench.h"
-#include "benchmarks/ndb_wrapper.h"
-#include "benchmarks/ndb_wrapper_impl.h"
-
-using namespace std;
 using namespace util;
+using namespace std;
 
-// These are hacks to access protected members of classes defined in silo
-class tpcc_bench_runner : public bench_runner
+/*int silotpcc_exec_one(int thread_id)
 {
-public:
-	tpcc_bench_runner(abstract_db *db);
-	vector<bench_loader*> make_loaders(void);
-	vector<bench_worker*> make_workers(void);
-	map<string, vector<abstract_ordered_index *>> partitions;
-};
-
-class my_bench_runner : public tpcc_bench_runner
-{
-public:
-	my_bench_runner(abstract_db *db) : tpcc_bench_runner(db) { }
-	vector<bench_loader*> call_make_loaders(void)
-	{
-		return make_loaders();
-	}
-	vector<bench_worker*> call_make_workers(void)
-	{
-		return make_workers();
-	}
-};
-
-class my_bench_worker : public bench_worker
-{
-public:
-	unsigned int get_worker_id(void)
-	{
-		return worker_id;
-	}
-
-	util::fast_random *get_r(void)
-	{
-		return &r;
-	}
-
-	void call_on_run_setup(void)
-	{
-		on_run_setup();
-	}
-};
-
-static abstract_db *db;
-static my_bench_runner *runner;
-static vector<my_bench_worker *> workers;
-
-int silotpcc_exec_one(int thread_id)
-{
-	auto worker = workers[thread_id];
+        auto worker = workers[thread_id];
 	auto workload = worker->get_workload();
 
 	double d = worker->get_r()->next_uniform();
@@ -96,13 +42,14 @@ int silotpcc_exec_one(int thread_id)
 		d -= workload[i].frequency;
 	}
 	return 1;
-}
+	}*/
+
 
 void AppMain() {
   KPRINTF("silomcd Start\n");
 
-  nthreads = 1;
-  scale_factor = 1;
+  nthreads = 15;
+  scale_factor = 15;
   pin_cpus = 0;
   verbose = 1;
 
@@ -115,8 +62,10 @@ void AppMain() {
   db = new ndb_wrapper<transaction_proto2>(
     logfiles, assignments, !nofsync, do_compress, fake_writes);
   ALWAYS_ASSERT(!transaction_proto2_static::get_hack_status());
-
+  
   runner = new my_bench_runner(db);
+
+  KPRINTF("db=0x%X runner=0x%X\n", db, runner);
 
   const vector<bench_loader *> loaders = runner->call_make_loaders();
   for (vector<bench_loader *>::const_iterator it = loaders.begin(); it != loaders.end(); ++it) {
@@ -130,15 +79,25 @@ void AppMain() {
   persisted_info = db->get_ntxn_persisted();
   ALWAYS_ASSERT(get<0>(persisted_info) == 0 && get<1>(persisted_info) == 0 && get<2>(persisted_info) == 0.0);
 
+  int wk = 0;
   // This is a hack to access protected members of classes defined in silo
-  for (auto w: runner->call_make_workers()) {
+  for (auto w: runner->call_make_workers()) {    
+    wk ++;
     workers.push_back((my_bench_worker *) w);
+    KPRINTF("wk=%d call_make_workers w=0x%X\n", wk, w);
   }
 
+  KPRINTF("workers=0x%X\n", workers);
+
+  auto id = ebbrt::ebb_allocator->AllocateLocal();
+  auto mc = ebbrt::EbbRef<ebbrt::Memcached>(id);
+  mc->Start(MCDPORT, workers);
+  ebbrt::kprintf("Memcached server listening on port %d\n", MCDPORT);
   
-  for(int i = 0; i < 100; i ++) {
+  
+  /*for(int i = 0; i < 10; i ++) {
     silotpcc_exec_one(0);
-  }
+    }*/
   
   KPRINTF("silomcd End\n");
 }

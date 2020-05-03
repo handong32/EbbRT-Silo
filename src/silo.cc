@@ -1,4 +1,4 @@
-#include <ebbrt/Debug.h>
+/*#include <ebbrt/Debug.h>
 #include <ebbrt/EbbAllocator.h>
 #include <ebbrt/SharedIOBufRef.h>
 #include <ebbrt/StaticSharedEbb.h>
@@ -71,14 +71,14 @@ void AppMain() {
   //KPRINTF("Silo main, args: %s\n", cmdline.c_str());
   KPRINTF("Silo main start\n");
 
-  /*for (uint32_t i = 0; i < 16; i++) {
-  ebbrt::event_manager->SpawnRemote(
-    [i] () mutable {
-      auto alrm = new Alarm(49159);
-      alrm->enable_timer();
-      printf("******* Alarm started on core %u\n", i);
-    }, i);
-    }*/
+  // for (uint32_t i = 0; i < 16; i++) {
+  // ebbrt::event_manager->SpawnRemote(
+  //   [i] () mutable {
+  //     auto alrm = new Alarm(49159);
+  //     alrm->enable_timer();
+  //     printf("******* Alarm started on core %u\n", i);
+  //   }, i);
+  //   }
   
   abstract_db *db = NULL;
   void (*test_fn)(abstract_db *) = NULL;
@@ -96,14 +96,15 @@ void AppMain() {
   vector<string> logfiles;
   vector<vector<unsigned>> assignments;
 
-  /*std::vector<std::string> strs;
-  boost::split(strs, cmdline, boost::is_any_of(" "));
-  int argc = strs.size();
-  char **argv = (char **) malloc (argc * sizeof(char **));
-  for(int i = 0; i < argc; i ++)
-  {
-    argv[i] = (char*)strs[i].c_str();
-    }*/
+  // std::vector<std::string> strs;
+  // boost::split(strs, cmdline, boost::is_any_of(" "));
+  // int argc = strs.size();
+  // char **argv = (char **) malloc (argc * sizeof(char **));
+  // for(int i = 0; i < argc; i ++)
+  // {
+  //   argv[i] = (char*)strs[i].c_str();
+  //   }
+  
   int argc = 8;
   char *argv[argc] = {"silo.elf32", "--verbose", "--bench", "tpcc", "--num-threads", "15", "--scale-factor", "15"};
 
@@ -260,4 +261,24 @@ void AppMain() {
 
   KPRINTF("Finished running EbbRT-silo\n");
   ebbrt::kabort();
+  }*/
+
+
+#include <ebbrt/Debug.h>
+#include <ebbrt/EbbAllocator.h>
+#include <ebbrt/native/Net.h>
+#include <ebbrt/native/Msr.h>
+#include <ebbrt/native/EventManager.h>
+#include <ebbrt/native/Cpu.h>
+
+#include "UdpCommand.h"
+
+void AppMain()
+{
+  auto uid = ebbrt::ebb_allocator->AllocateLocal();
+  auto udpc = ebbrt::EbbRef<ebbrt::UdpCommand>(uid);
+  udpc->Start(6666);
+  ebbrt::kprintf("UdpCommand server listening on port %d\n", 6666);
 }
+
+

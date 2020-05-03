@@ -157,8 +157,8 @@ bench_worker::run()
       KPRINTF("mycount = %u\n", mycount);
       }*/
     
-    if (mycount > 1000000) {
-    //if (mycount > 10000) {
+    //if (mycount > 1000000) {
+    if (mycount > 100000) {
       myrunning = false;
     }
   }
@@ -320,10 +320,12 @@ bench_runner::run()
     KPRINTF("%d ,", it->second);
   }
   KPRINTF("\n");
-  KPRINTF("mycounts : \n");
+  /*KPRINTF("mycounts : \n");
   for (auto it = workers.begin(); it != workers.end(); ++it) {
     KPRINTF("MyCount = %ld\n", (*it)->getmycount());
-  }
+    }*/
+  KPRINTF("returning \n");
+  return;
 }
 
 template <typename K, typename V>
