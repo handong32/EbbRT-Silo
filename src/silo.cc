@@ -1,4 +1,4 @@
-/*#include <ebbrt/Debug.h>
+#include <ebbrt/Debug.h>
 #include <ebbrt/EbbAllocator.h>
 #include <ebbrt/SharedIOBufRef.h>
 #include <ebbrt/StaticSharedEbb.h>
@@ -27,13 +27,13 @@
 
 #include "allocator.h"
 #include "benchmarks/bench.h"
+#include "benchmarks/tpcc.h"
 #include "benchmarks/ndb_wrapper.h"
 #include "benchmarks/ndb_wrapper_impl.h"
 #include "benchmarks/kvdb_wrapper.h"
 #include "benchmarks/kvdb_wrapper_impl.h"
 
 //#include "alarm.h"
-
 using namespace std;
 using namespace util;
 
@@ -250,8 +250,7 @@ void AppMain() {
 
     KPRINTF("system properties:\n");
     KPRINTF("  btree_internal_node_size: %d\n", concurrent_btree::InternalNodeSize());
-    KPRINTF("  btree_leaf_node_size    : %d\n", concurrent_btree::LeafNodeSize());
-
+    KPRINTF("  btree_leaf_node_size    : %d\n", concurrent_btree::LeafNodeSize());   
     test_fn(db);
   }
   else {
@@ -261,24 +260,45 @@ void AppMain() {
 
   KPRINTF("Finished running EbbRT-silo\n");
   ebbrt::kabort();
-  }*/
+}
 
 
-#include <ebbrt/Debug.h>
+/*#include <ebbrt/Debug.h>
 #include <ebbrt/EbbAllocator.h>
 #include <ebbrt/native/Net.h>
 #include <ebbrt/native/Msr.h>
 #include <ebbrt/native/EventManager.h>
 #include <ebbrt/native/Cpu.h>
 
-#include "UdpCommand.h"
+//#include "UdpCommand.h"
 
 void AppMain()
 {
+  //ebbrt::kprintf("UdpCommand server listening on port %d\n", 6666);
   auto uid = ebbrt::ebb_allocator->AllocateLocal();
   auto udpc = ebbrt::EbbRef<ebbrt::UdpCommand>(uid);
   udpc->Start(6666);
-  ebbrt::kprintf("UdpCommand server listening on port %d\n", 6666);
-}
+  ebbrt::kprintf("UdpCommand server listening on port %d\n", 6666); 
+  
+  for (uint32_t i = 0; i < static_cast<uint32_t>(ebbrt::Cpu::Count()); i++) {
+    ebbrt::event_manager->SpawnRemote(
+      [i] () mutable {
+	// disables turbo boost, thermal control circuit
+	ebbrt::msr::Write(IA32_MISC_ENABLE, 0x4000850081);
+	// same p state as Linux with performance governor
+	ebbrt::msr::Write(IA32_PERF_CTL, 0x1D00);
+	ebbrt::kprintf_force("Core %u: disabled turbo boost\n", i);
+      }, i);
+  }
+  ebbrt::clock::SleepMilli(1000);
+  
+  ebbrt::event_manager->SpawnRemote(
+    [] () mutable {            
+      auto uid = ebbrt::ebb_allocator->AllocateLocal();
+      auto udpc = ebbrt::EbbRef<ebbrt::UdpCommand>(uid);
+      udpc->Start(6666);
+      ebbrt::kprintf_force("Core %u: UdpCommand server listening on port %d\n", static_cast<uint32_t>(ebbrt::Cpu::GetMine()), 6666);
+      }, 1);
+}*/
 
 

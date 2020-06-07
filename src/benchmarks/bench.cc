@@ -108,13 +108,46 @@ static event_avg_counter evt_avg_abort_spins("avg_abort_spins");
 void
 bench_worker::run()
 {
+  size_t mcore;
+  ebbrt::rapl::RaplCounter rp;
+  ebbrt::perf::PerfCounter nins;
+  ebbrt::perf::PerfCounter ncyc;
+  ebbrt::perf::PerfCounter nllcm;
+  ebbrt::perf::PerfCounter nllcr;
+
+  ninstructions = 0;
+  ncycles = 0;
+  nllc_miss = 0;
+  nllc_ref = 0;
+  joules = 0.0;
+  mcore = static_cast<size_t>(ebbrt::Cpu::GetMine());
+
+  nins = ebbrt::perf::PerfCounter(ebbrt::perf::PerfEvent::fixed_instructions);
+  ncyc = ebbrt::perf::PerfCounter(ebbrt::perf::PerfEvent::fixed_cycles);
+  nllcm = ebbrt::perf::PerfCounter(ebbrt::perf::PerfEvent::llc_misses);
+  nllcr = ebbrt::perf::PerfCounter(ebbrt::perf::PerfEvent::llc_references);
+  
+  if(mcore == 0 || mcore == 1) {
+    rp = ebbrt::rapl::RaplCounter();
+    rp.Start();
+  }
+  
+  nins.Start();
+  ncyc.Start();
+  nllcm.Start();
+  nllcr.Start();
+    
   on_run_setup();
   scoped_db_thread_ctx ctx(db, false);
   const workload_desc_vec workload = get_workload();
   txn_counts.resize(workload.size());
   bool myrunning = true;
+
+  auto curd = ebbrt::clock::Wall::Now().time_since_epoch();
+  auto tstart = std::chrono::duration_cast<std::chrono::seconds>(curd).count();
+  
   while (myrunning && (run_mode != RUNMODE_OPS || ntxn_commits < ops_per_worker)) {
-    mycount ++;
+    //mycount ++;
     double d = r.next_uniform();
     for (size_t i = 0; i < workload.size(); i++) {
       if ((i + 1) == workload.size() || d < workload[i].frequency) {
@@ -152,16 +185,34 @@ bench_worker::run()
       }
       d -= workload[i].frequency;
     }
-
-    /*if((mycount % 10000) == 1) {
-      KPRINTF("mycount = %u\n", mycount);
-      }*/
     
     //if (mycount > 1000000) {
-    if (mycount > 100000) {
+    curd = ebbrt::clock::Wall::Now().time_since_epoch();
+    auto tend = std::chrono::duration_cast<std::chrono::seconds>(curd).count();
+    if(static_cast<double>(tend - tstart) > 30.0) {
       myrunning = false;
     }
   }
+
+  nins.Stop();
+  ncyc.Stop();
+  nllcm.Stop();
+  nllcr.Stop();
+  
+  if(mcore == 0 || mcore == 1) {
+    rp.Stop();
+    joules = rp.Read();
+    rp.Clear();
+  }
+  ninstructions = nins.Read();
+  ncycles = ncyc.Read();
+  nllc_ref = nllcr.Read();
+  nllc_miss = nllcm.Read();
+  
+  nins.Clear();
+  ncyc.Clear();
+  nllcm.Clear();
+  nllcr.Clear();
 }
 
 void
@@ -259,10 +310,23 @@ bench_runner::run()
   size_t n_commits = 0;
   size_t n_aborts = 0;
   uint64_t latency_numer_us = 0;
+  uint64_t ninstructions = 0;
+  uint64_t ncycles = 0;
+  uint64_t nllc_ref = 0;
+  uint64_t nllc_miss = 0;
+  double joules = 0.0;
+  
   for (size_t i = 0; i < nthreads; i++) {
     n_commits += workers[i]->get_ntxn_commits();
     n_aborts += workers[i]->get_ntxn_aborts();
     latency_numer_us += workers[i]->get_latency_numer_us();
+
+    ninstructions += workers[i]->get_instructions();
+    ncycles += workers[i]->get_cycles();
+    nllc_ref += workers[i]->get_llc_ref();
+    nllc_miss += workers[i]->get_llc_miss();
+
+    joules += workers[i]->get_joules();
   }
   const auto persisted_info = db->get_ntxn_persisted();
 
@@ -304,7 +368,7 @@ bench_runner::run()
     map_agg(agg_txn_counts, workers[i]->get_txn_counts());
   }
   
-  KPRINTF("runtime: %lf sec\n",elapsed_sec);
+  /*KPRINTF("runtime: %lf sec\n",elapsed_sec);
   KPRINTF("agg_nosync_throughput: %lf ops/sec\n",agg_nosync_throughput);
   KPRINTF("avg_nosync_per_core_throughput: %lf ops/sec/core\n",avg_nosync_per_core_throughput);
   KPRINTF("agg_throughput: %lf ops/sec\n",agg_throughput);
@@ -314,12 +378,21 @@ bench_runner::run()
   KPRINTF("avg_latency: %lf ms\n",avg_latency_ms);
   KPRINTF("avg_persist_latency: %lf ms\n",avg_persist_latency_ms);
   KPRINTF("agg_abort_rate: %lf aborts/sec\n",agg_abort_rate);
-  KPRINTF("avg_per_core_abort_rate: %lf aborts/sec/core\n",avg_per_core_abort_rate);
+  KPRINTF("avg_per_core_abort_rate: %lf aborts/sec/core\n",avg_per_core_abort_rate);*/
   KPRINTF("txn breakdown : ");
   for (auto it = agg_txn_counts.begin(); it != agg_txn_counts.end(); ++it) {
     KPRINTF("%d ,", it->second);
   }
   KPRINTF("\n");
+
+  
+  KPRINTF("***COMMITS ELAPSED_SEC INSTRUCTIONS CYCLES LLC_MISS LLC_REF JOULES agg_tput agg_persist_tput avg_latency_ms avg_persist_latency_ms agg_abort_rate\n");
+  KPRINTF("+++%d %.4lf %llu %llu %llu %llu %.4lf %lf %lf %lf %lf %lf\n", n_commits,
+	  elapsed_sec, ninstructions,
+	  ncycles, nllc_miss, nllc_ref, joules,
+	  agg_throughput, agg_persist_throughput, avg_latency_ms,
+	  avg_persist_latency_ms, agg_abort_rate);
+
   /*KPRINTF("mycounts : \n");
   for (auto it = workers.begin(); it != workers.end(); ++it) {
     KPRINTF("MyCount = %ld\n", (*it)->getmycount());

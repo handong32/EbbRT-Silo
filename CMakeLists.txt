@@ -9,26 +9,29 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++14 -DCONFIG_H=config/config-pe
 
 include_directories(${PROJECT_SRC_DIR})
 #set_source_files_properties(src/xxhash.c PROPERTIES LANGUAGE C)
-#add_executable(silo.elf src/varint.cc src/allocator.cc src/counter.cc src/core.cc
-#  src/xxhash.cc src/lz4.cc src/memory.cc src/ticker.cc src/rcu.cc src/masstree/compiler.cc
-#  src/masstree/str.cc src/masstree/string.cc src/masstree/straccum.cc src/masstree/json.cc
-#  src/btree.cc src/tuple.cc src/txn_btree.cc src/txn.cc src/txn_proto2_impl.cc
-#  src/benchmarks/masstree/kvrandom.cc src/thread.cc
-#  src/benchmarks/bench.cc src/alarm.cc src/UdpCommand.cc
-  #src/benchmarks/tpcc.cc src/benchmarks/bench.cc src/alarm.cc src/UdpCommand.cc
-#  src/silo.cc)
-
-add_executable(silomcd.elf src/varint.cc src/allocator.cc src/counter.cc src/core.cc
+add_executable(silo.elf src/varint.cc src/allocator.cc src/counter.cc src/core.cc
   src/xxhash.cc src/lz4.cc src/memory.cc src/ticker.cc src/rcu.cc src/masstree/compiler.cc
   src/masstree/str.cc src/masstree/string.cc src/masstree/straccum.cc src/masstree/json.cc
   src/btree.cc src/tuple.cc src/txn_btree.cc src/txn.cc src/txn_proto2_impl.cc
   src/benchmarks/masstree/kvrandom.cc src/thread.cc
-  src/benchmarks/tpcc.cc src/benchmarks/bench.cc src/alarm.cc src/Memcached.cc
-  src/silomcd.cc)
+  src/benchmarks/tpcc.cc src/benchmarks/bench.cc src/alarm.cc
+#  src/benchmarks/bench.cc src/alarm.cc src/UdpCommand.cc
+  #src/benchmarks/tpcc.cc src/benchmarks/bench.cc src/alarm.cc src/UdpCommand.cc
+  src/silo.cc)
+
+add_custom_command(TARGET silo.elf POST_BUILD
+  COMMAND objcopy -O elf32-i386 silo.elf silo.elf32)
+
+#add_executable(silomcd.elf src/varint.cc src/allocator.cc src/counter.cc src/core.cc
+#  src/xxhash.cc src/lz4.cc src/memory.cc src/ticker.cc src/rcu.cc src/masstree/compiler.cc
+#  src/masstree/str.cc src/masstree/string.cc src/masstree/straccum.cc src/masstree/json.cc
+#  src/btree.cc src/tuple.cc src/txn_btree.cc src/txn.cc src/txn_proto2_impl.cc
+#  src/benchmarks/masstree/kvrandom.cc src/thread.cc
+#  src/benchmarks/tpcc.cc src/benchmarks/bench.cc src/alarm.cc src/Memcached.cc
+#  src/silomcd.cc)
 
 
-#add_custom_command(TARGET silo.elf POST_BUILD
-#  COMMAND objcopy -O elf32-i386 silo.elf silo.elf32)
 
-add_custom_command(TARGET silomcd.elf POST_BUILD
-  COMMAND objcopy -O elf32-i386 silomcd.elf silomcd.elf32)
+
+#add_custom_command(TARGET silomcd.elf POST_BUILD
+#  COMMAND objcopy -O elf32-i386 silomcd.elf silomcd.elf32)

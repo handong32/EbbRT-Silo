@@ -2225,7 +2225,10 @@ tpcc_do_test(abstract_db *db)
 
   tpcc_bench_runner r(db);
   r.run();
-  KPRINTF("*** tpcc_bench_runner finished returning \n");
+  KPRINTF("*** tpcc_bench_runner finished 1 \n");
+
+  //r.run();
+  //KPRINTF("*** tpcc_bench_runner finished 2 \n");
 
   return;
 }

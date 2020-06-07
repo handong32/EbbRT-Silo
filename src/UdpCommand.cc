@@ -1,4 +1,3 @@
-
 //          Copyright Boston University SESA Group 2013 - 2014.
 // Distributed under the Boost Software License, Version 1.0.
 //    (See accompanying file LICENSE_1_0.txt or copy at
@@ -22,6 +21,7 @@
 #include <ebbrt/SpinBarrier.h>
 #include <ebbrt/native/Cpu.h>
 #include <ebbrt/native/Multiboot.h>
+#include <ebbrt/native/Perf.h>
 
 #include <iostream>
 #include <fstream>
@@ -100,7 +100,22 @@ void ebbrt::UdpCommand::ReceiveCommand(
   std::string delimiter = ",";
   uint32_t pos = 0, param = 0;
   std::string token1, token2;
-
+  uint64_t totalCycles = 0;
+  uint64_t totalIns = 0;
+  uint64_t totalLLCmisses = 0;
+  double totalNrg{0.0};
+  double totalTime{0.0};
+  double totalPower{0.0};
+  
+  ebbrt::perf::PerfCounter perfCycles;
+  ebbrt::perf::PerfCounter perfInst;
+  ebbrt::perf::PerfCounter perfLLC_ref;
+  ebbrt::perf::PerfCounter perfLLC_miss;
+  ebbrt::perf::PerfCounter perfTLB_store_miss;
+  ebbrt::perf::PerfCounter perfTLB_load_miss;
+  ebbrt::rapl::RaplCounter powerMeter0;
+  ebbrt::rapl::RaplCounter powerMeter1;
+  
   pos = s.find(delimiter);
   token1 = s.substr(0, pos);
   token2 = s.substr(pos+1, s.length());
@@ -156,75 +171,7 @@ void ebbrt::UdpCommand::ReceiveCommand(
 	  uint64_t tmp2 = ebbrt::msr::Read(IA32_PERF_STATUS);
 	  uint64_t tmp3 = ebbrt::msr::Read(IA32_PERF_CTL);
 		  
-	  ebbrt::kprintf_force("Core %u: IA32_MISC_ENABLE(0x%X) = 0x%llX IA32_PERF_STATUS(0x%X) = 0x%llX IA32_PERF_CTL(0x%X) = 0x%llX \n", i, IA32_MISC_ENABLE, tmp1, IA32_PERF_STATUS, tmp2, IA32_PERF_CTL, tmp3);
-	  
-	  //uint64_t tmp = ebbrt::msr::Read(IA32_APIC_BASE);
-	  //ebbrt::kprintf_force("Core %u: IA32_APIC_BASE(0x%X) = 0x%llX\n", i, IA32_APIC_BASE, tmp);
-
-	  /*uint64_t tmp = ebbrt::msr::Read(IA32_FEATURE_CONTROL);
-	  ebbrt::kprintf_force("Core %u: IA32_FEATURE_CONTROL(0x%X) = 0x%llX\n", i, IA32_FEATURE_CONTROL, tmp);
-
-	  //tmp = ebbrt::msr::Read(IA32_SMM_MONITOR_CTL);
-	  //ebbrt::kprintf_force("Core %u: IA32_SMM_MONITOR_CTL(0x%X) = 0x%llX\n", i, IA32_SMM_MONITOR_CTL, tmp);
-
-	  tmp = ebbrt::msr::Read(IA32_MTRRCAP);
-	  ebbrt::kprintf_force("Core %u: IA32_MTRRCAP(0x%X) = 0x%llX\n", i, IA32_MTRRCAP, tmp);
-
-	  //tmp = ebbrt::msr::Read(IA32_SYSENTER_CS);
-	  //ebbrt::kprintf_force("Core %u: IA32_SYSENTER_CS(0x%X) = 0x%llX\n", i, IA32_SYSENTER_CS, tmp);
-
-	  tmp = ebbrt::msr::Read(IA32_MCG_CAP);
-	  ebbrt::kprintf_force("Core %u: IA32_MCG_CAP(0x%X) = 0x%llX\n", i, IA32_MCG_CAP, tmp);
-	  
-	  tmp = ebbrt::msr::Read(IA32_PERF_STATUS);
-	  ebbrt::kprintf_force("Core %u: IA32_PERF_STATUS(0x%X) = 0x%llX\n", i, IA32_PERF_STATUS, tmp);
-	  
-	  tmp = ebbrt::msr::Read(IA32_PERF_CTL);
-	  ebbrt::kprintf_force("Core %u: IA32_PERF_CTL(0x%X) = 0x%llX\n", i, IA32_PERF_CTL, tmp);
-
-	  tmp = ebbrt::msr::Read(IA32_CLOCK_MODULATION);
-	  ebbrt::kprintf_force("Core %u: IA32_CLOCK_MODULATION(0x%X) = 0x%llX\n", i, IA32_CLOCK_MODULATION, tmp);
-
-	  tmp = ebbrt::msr::Read(IA32_THERM_INTERRUPT);
-	  ebbrt::kprintf_force("Core %u: IA32_THERM_INTERRUPT(0x%X) = 0x%llX\n", i, IA32_THERM_INTERRUPT, tmp);
-
-	  tmp = ebbrt::msr::Read(IA32_THERM_STATUS);
-	  ebbrt::kprintf_force("Core %u: IA32_THERM_STATUS(0x%X) = 0x%llX\n", i, IA32_THERM_STATUS, tmp);
-
-	  tmp = ebbrt::msr::Read(IA32_MISC_ENABLE);
-	  ebbrt::kprintf_force("Core %u: IA32_MISC_ENABLE(0x%X) = 0x%llX\n", i, IA32_MISC_ENABLE, tmp);
-
-	  tmp = ebbrt::msr::Read(IA32_PACKAGE_THERM_INTERRUPT);
-	  ebbrt::kprintf_force("Core %u: IA32_PACKAGE_THERM_INTERRUPT(0x%X) = 0x%llX\n", i, IA32_PACKAGE_THERM_INTERRUPT, tmp);
-
-	  tmp = ebbrt::msr::Read(IA32_PACKAGE_THERM_STATUS);
-	  ebbrt::kprintf_force("Core %u: IA32_PACKAGE_THERM_STATUS(0x%X) = 0x%llX\n", i, IA32_PACKAGE_THERM_STATUS, tmp);
-	  
-	  tmp = ebbrt::msr::Read(IA32_PLATFORM_DCA_CAP);
-	  ebbrt::kprintf_force("Core %u: IA32_PLATFORM_DCA_CAP(0x%X) = 0x%llX\n", i, IA32_PLATFORM_DCA_CAP, tmp);
-
-	  tmp = ebbrt::msr::Read(IA32_CPU_DCA_CAP);
-	  ebbrt::kprintf_force("Core %u: IA32_CPU_DCA_CAP(0x%X) = 0x%llX\n", i, IA32_CPU_DCA_CAP, tmp);
-	  
-	  tmp = ebbrt::msr::Read(IA32_DCA_0_CAP);
-	  ebbrt::kprintf_force("Core %u: IA32_DCA_0_CAP(0x%X) = 0x%llX\n", i, IA32_DCA_0_CAP, tmp);
-
-	  // sandy bridge only
-	  tmp = ebbrt::msr::Read(MSR_PLATFORM_INFO);
-	  ebbrt::kprintf_force("Core %u: MSR_PLATFORM_INFO(0x%X) = 0x%llX\n", i, MSR_PLATFORM_INFO, tmp);
-
-	  tmp = ebbrt::msr::Read(MSR_PKG_CST_CONFIG_CONTROL);
-	  ebbrt::kprintf_force("Core %u: MSR_PKG_CST_CONFIG_CONTROL(0x%X) = 0x%llX\n", i, MSR_PKG_CST_CONFIG_CONTROL, tmp);
-
-	  tmp = ebbrt::msr::Read(MSR_PMG_IO_CAPTURE_BASE);
-	  ebbrt::kprintf_force("Core %u: MSR_PMG_IO_CAPTURE_BASE(0x%X) = 0x%llX\n", i, MSR_PMG_IO_CAPTURE_BASE, tmp);
-
-	  tmp = ebbrt::msr::Read(MSR_TEMPERATURE_TARGET);
-	  ebbrt::kprintf_force("Core %u: MSR_TEMPERATURE_TARGET(0x%X) = 0x%llX\n", i, MSR_TEMPERATURE_TARGET, tmp);
-
-	  tmp = ebbrt::msr::Read(MSR_MISC_FEATURE_CONTROL);
-	  ebbrt::kprintf_force("Core %u: MSR_MISC_FEATURE_CONTROL(0x%X) = 0x%llX\n", i, MSR_MISC_FEATURE_CONTROL, tmp);
-	  */
+	  ebbrt::kprintf_force("Core %u: IA32_MISC_ENABLE(0x%X) = 0x%llX IA32_PERF_STATUS(0x%X) = 0x%llX IA32_PERF_CTL(0x%X) = 0x%llX \n", i, IA32_MISC_ENABLE, tmp1, IA32_PERF_STATUS, tmp2, IA32_PERF_CTL, tmp3);	  
 	}, i);
     }
   } else if(token1 == "start_silo") {
@@ -247,12 +194,12 @@ void ebbrt::UdpCommand::ReceiveCommand(
      vector<vector<unsigned>> assignments;
      
      int argc = 8;
-     char *argv[argc] = {"silo.elf32", "--verbose", "--bench", "tpcc", "--num-threads", "15", "--scale-factor", "15"};
+     char *argv[argc] = {"silo.elf32", "--bench", "tpcc", "--num-threads", "15", "--scale-factor", "15", "--pmu"};
 
-  
      while (1) {
        static struct option long_options[] =
 	 {
+	   {"pmu"                        , no_argument       , &pmu                       , 1}   ,
 	   {"verbose"                    , no_argument       , &verbose                   , 1}   ,
 	   {"parallel-loading"           , no_argument       , &enable_parallel_loading   , 1}   ,
 	   {"pin-cpus"                   , no_argument       , &pin_cpus                  , 1}   ,
@@ -395,24 +342,15 @@ void ebbrt::UdpCommand::ReceiveCommand(
        tpcc_bench_runner r(db);
        r.run();
   
-       //tpcc_do_test(db);
        KPRINTF("Finished running EbbRT-silo\n");
+       
        r.run();
        
        ebbrt::event_manager->SaveContext(context_);
        KPRINTF("context restarted\n");
      }          
-  } else if (token1 == "activate") {
-    KPRINTF("activate context\n");
-    ebbrt::event_manager->ActivateContext(std::move(context_));
   } else {
-    for (uint32_t i = 0; i < static_cast<uint32_t>(Cpu::Count()); i++) {
-      event_manager->SpawnRemote(
-	[this, token1, param, i] () mutable {
-	  //ebbrt::kprintf_force("SpawnRemote %u\n", i);
-	  network_manager->Config(token1, param);
-	}, i);
-    }
+    ebbrt::kprintf_force("Unknown UDP command\n");
   }  
   //ebbrt::kprintf_force("Core: %u ReceiveCommand() from_port=%u message:%s\n", mcore, from_port, s.c_str());
 }
