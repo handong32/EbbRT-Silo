@@ -2145,6 +2145,22 @@ private:
   map<string, vector<abstract_ordered_index *>> partitions;
 };
 
+/*void setcpu() {  
+  for (uint32_t i = 0; i < static_cast<uint32_t>(ebbrt::Cpu::Count()); i++) {
+    ebbrt::event_manager->SpawnRemote(
+      [i] () mutable {
+	// same p state as Linux with performance governor
+	ebbrt::msr::Write(IA32_PERF_CTL, dvfs);
+	if(i == 0 || i == 1) {
+	  auto pm = ebbrt::rapl::RaplCounter();
+	  pm.SetLimit(rapl);
+	}
+      }, i);
+  }
+  ebbrt::clock::SleepMilli(3000);
+  //KPRINTF("xxxDVFS %u RAPL %u\n", dvfs, rapl);
+  }*/
+
 void
 tpcc_do_test(abstract_db *db)
 {
@@ -2223,6 +2239,70 @@ tpcc_do_test(abstract_db *db)
     KPRINTF("  workload_mix                 : [%d, %d, %d, %d, %d]\n", g_txn_workload_mix[0], g_txn_workload_mix[1], g_txn_workload_mix[2], g_txn_workload_mix[3], g_txn_workload_mix[4]);
   }
 
-  tpcc_bench_runner r(db);
-  r.run();
+  
+  //setcpu();
+  tpcc_bench_runner r1(db);
+  r1.run();  
+
+  /*rapl = 155;
+  setcpu(); 
+  tpcc_bench_runner r2(db);
+  r2.run();
+
+  rapl = 145;
+  setcpu(); 
+  tpcc_bench_runner r3(db);
+  r3.run();
+
+  rapl = 135;
+  setcpu(); 
+  tpcc_bench_runner r4(db);
+  r4.run();
+
+  rapl = 125;
+  setcpu(); 
+  tpcc_bench_runner r5(db);
+  r5.run();
+
+  rapl = 115;
+  setcpu(); 
+  tpcc_bench_runner r6(db);
+  r6.run();
+
+  rapl = 105;
+  setcpu(); 
+  tpcc_bench_runner r7(db);
+  r7.run();
+
+  rapl = 95;
+  setcpu(); 
+  tpcc_bench_runner r8(db);
+  r8.run();
+
+  rapl = 85;
+  setcpu(); 
+  tpcc_bench_runner r9(db);
+  r9.run();
+
+  rapl = 75;
+  setcpu(); 
+  tpcc_bench_runner r10(db);
+  r10.run();
+
+  rapl = 65;
+  setcpu(); 
+  tpcc_bench_runner r11(db);
+  r11.run();
+
+  rapl = 55;
+  setcpu(); 
+  tpcc_bench_runner r12(db);
+  r12.run();
+
+  rapl = 45;
+  setcpu(); 
+  tpcc_bench_runner r13(db);
+  r13.run();
+  */
+  KPRINTF("DONE\n");
 }

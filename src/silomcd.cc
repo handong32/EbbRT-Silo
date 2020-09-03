@@ -134,7 +134,6 @@ void AppMain() {
   for (auto w: runner->call_make_workers()) {
     workers.push_back((my_bench_worker *) w);
   }
-
   
   for(int i = 0; i < 100; i ++) {
     silotpcc_exec_one(0);

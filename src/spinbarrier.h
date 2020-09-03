@@ -14,7 +14,7 @@ public:
   spin_barrier(size_t n)
     : n(n)
   {
-    ebbrt::kprintf("In %s n = %d\n", __PRETTY_FUNCTION__, n);
+    //ebbrt::kprintf("In %s n = %d\n", __PRETTY_FUNCTION__, n);
     ALWAYS_ASSERT(n > 0);
   }
 
@@ -30,7 +30,7 @@ public:
   void
   count_down()
   {
-    ebbrt::kprintf("In %s n = %d\n", __PRETTY_FUNCTION__, n);
+    //ebbrt::kprintf("In %s n = %d\n", __PRETTY_FUNCTION__, n);
     // written like this (instead of using __sync_fetch_and_add())
     // so we can have assertions
     for (;;) {
@@ -44,7 +44,7 @@ public:
   void
   wait_for()
   {
-    ebbrt::kprintf("In %s n = %d\n", __PRETTY_FUNCTION__, n);
+    //ebbrt::kprintf("In %s n = %d\n", __PRETTY_FUNCTION__, n);
     while (n > 0)
       nop_pause();
   }

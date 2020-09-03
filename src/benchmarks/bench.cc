@@ -11,6 +11,7 @@
 //#include <sys/sysinfo.h>
 
 #include "bench.h"
+#include "extvar.h"
 
 #include "../counter.h"
 #include "../scopedperf.hh"
@@ -108,11 +109,44 @@ static event_avg_counter evt_avg_abort_spins("avg_abort_spins");
 void
 bench_worker::run()
 {
+  size_t mcore;
+  ebbrt::rapl::RaplCounter rp;
+  ebbrt::perf::PerfCounter nins;
+  ebbrt::perf::PerfCounter ncyc;
+  ebbrt::perf::PerfCounter nllcm;
+  ebbrt::perf::PerfCounter nllcr;
+
+  ninstructions = 0;
+  ncycles = 0;
+  nllc_miss = 0;
+  nllc_ref = 0;
+  joules = 0.0;
+  mcore = static_cast<size_t>(ebbrt::Cpu::GetMine());
+
+  nins = ebbrt::perf::PerfCounter(ebbrt::perf::PerfEvent::fixed_instructions);
+  ncyc = ebbrt::perf::PerfCounter(ebbrt::perf::PerfEvent::fixed_cycles);
+  nllcm = ebbrt::perf::PerfCounter(ebbrt::perf::PerfEvent::llc_misses);
+  nllcr = ebbrt::perf::PerfCounter(ebbrt::perf::PerfEvent::llc_references);
+
+  if(mcore == 0 || mcore == 1) {
+    rp = ebbrt::rapl::RaplCounter();
+    rp.Start();
+  }
+
+  nins.Start();
+  ncyc.Start();
+  nllcm.Start();
+  nllcr.Start();
+  
   on_run_setup();
   scoped_db_thread_ctx ctx(db, false);
   const workload_desc_vec workload = get_workload();
   txn_counts.resize(workload.size());
   bool myrunning = true;
+
+  //auto curd = ebbrt::clock::Wall::Now().time_since_epoch();
+  //auto tstart = std::chrono::duration_cast<std::chrono::seconds>(curd).count();
+  mycount = 0;
   while (myrunning && (run_mode != RUNMODE_OPS || ntxn_commits < ops_per_worker)) {
     mycount ++;
     double d = r.next_uniform();
@@ -152,16 +186,37 @@ bench_worker::run()
       }
       d -= workload[i].frequency;
     }
-
-    /*if((mycount % 10000) == 1) {
-      KPRINTF("mycount = %u\n", mycount);
-      }*/
     
     if (mycount > 1000000) {
-    //if (mycount > 10000) {
       myrunning = false;
     }
+
+    /*curd = ebbrt::clock::Wall::Now().time_since_epoch();
+    auto tend = std::chrono::duration_cast<std::chrono::seconds>(curd).count();
+    if(static_cast<double>(tend - tstart) > 30.0) {
+      myrunning = false;
+      }*/
   }
+
+  nins.Stop();
+  ncyc.Stop();
+  nllcm.Stop();
+  nllcr.Stop();
+
+  if(mcore == 0 || mcore == 1) {
+    rp.Stop();
+    joules = rp.Read();
+    rp.Clear();
+  }
+  ninstructions = nins.Read();
+  ncycles = ncyc.Read();
+  nllc_ref = nllcr.Read();
+  nllc_miss = nllcm.Read();
+
+  nins.Clear();
+  ncyc.Clear();
+  nllcm.Clear();
+  nllcr.Clear();
 }
 
 void
@@ -225,11 +280,12 @@ bench_runner::run()
   std::atomic<size_t> count(0);
   static ebbrt::SpinBarrier bar(nthreads);
   size_t i = 0;
+  uint64_t rdtsc_start = ebbrt::rdtsc();
   for (vector<bench_worker *>::const_iterator it = workers.begin();
        it != workers.end(); ++it) {
     ebbrt::event_manager->SpawnRemote([&context, &count, mainCPU, it]() {
 	int mycpu = static_cast<int>(ebbrt::Cpu::GetMine());
-	KPRINTF("running on cpu: %d\n", mycpu);
+	//KPRINTF("running on cpu: %d\n", mycpu);
 	
 	(*it)->start();
 	count ++;
@@ -240,9 +296,9 @@ bench_runner::run()
       }, i);
     i++;
   }
-
-  ebbrt::event_manager->SaveContext(context);
-
+  
+  ebbrt::event_manager->SaveContext(context);  
+  
   // EbbRT don't need barriers, running for set number of iterations
   //barrier_a.wait_for(); // wait for all threads to start up
   //timer t2, t_nosync;
@@ -256,25 +312,40 @@ bench_runner::run()
   
   const unsigned long elapsed_nosync = t_nosync.lap();
   db->do_txn_finish(); // waits for all worker txns to persist
+  uint64_t rdtsc_end = ebbrt::rdtsc();
+  
   size_t n_commits = 0;
   size_t n_aborts = 0;
   uint64_t latency_numer_us = 0;
+  int64_t ninstructions = 0;
+  uint64_t ncycles = 0;
+  uint64_t nllc_ref = 0;
+  uint64_t nllc_miss = 0;
+  double joules = 0.0;
+    
   for (size_t i = 0; i < nthreads; i++) {
     n_commits += workers[i]->get_ntxn_commits();
     n_aborts += workers[i]->get_ntxn_aborts();
     latency_numer_us += workers[i]->get_latency_numer_us();
+    
+    ninstructions += workers[i]->get_instructions();
+    ncycles += workers[i]->get_cycles();
+    nllc_ref += workers[i]->get_llc_ref();
+    nllc_miss += workers[i]->get_llc_miss();
+    
+    joules += workers[i]->get_joules();
   }
   const auto persisted_info = db->get_ntxn_persisted();
-
+  
   const unsigned long elapsed = t2.lap(); // lap() must come after do_txn_finish(),
-                                         // because do_txn_finish() potentially
-                                         // waits a bit
-
+  // because do_txn_finish() potentially
+  // waits a bit
+  
   // various sanity checks
   ALWAYS_ASSERT(get<0>(persisted_info) == get<1>(persisted_info));
-   // not == b/c persisted_info does not count read-only txns
-  ALWAYS_ASSERT(n_commits >= get<1>(persisted_info));
-
+  // not == b/c persisted_info does not count read-only txns
+  ALWAYS_ASSERT(n_commits >= get<1>(persisted_info));	  
+  
   const double elapsed_nosync_sec = double(elapsed_nosync) / 1000000.0;
   const double agg_nosync_throughput = double(n_commits) / elapsed_nosync_sec;
   const double avg_nosync_per_core_throughput = agg_nosync_throughput / double(workers.size());
@@ -304,26 +375,34 @@ bench_runner::run()
     map_agg(agg_txn_counts, workers[i]->get_txn_counts());
   }
   
-  KPRINTF("runtime: %lf sec\n",elapsed_sec);
-  KPRINTF("agg_nosync_throughput: %lf ops/sec\n",agg_nosync_throughput);
-  KPRINTF("avg_nosync_per_core_throughput: %lf ops/sec/core\n",avg_nosync_per_core_throughput);
-  KPRINTF("agg_throughput: %lf ops/sec\n",agg_throughput);
-  KPRINTF("avg_per_core_throughput: %lf ops/sec/core\n",avg_per_core_throughput);
-  KPRINTF("agg_persist_throughput: %lf ops/sec\n",agg_persist_throughput);
-  KPRINTF("avg_per_core_persist_throughput: %lf ops/sec/core\n",avg_per_core_persist_throughput);
-  KPRINTF("avg_latency: %lf ms\n",avg_latency_ms);
-  KPRINTF("avg_persist_latency: %lf ms\n",avg_persist_latency_ms);
-  KPRINTF("agg_abort_rate: %lf aborts/sec\n",agg_abort_rate);
-  KPRINTF("avg_per_core_abort_rate: %lf aborts/sec/core\n",avg_per_core_abort_rate);
+  // KPRINTF("runtime: %lf sec\n",elapsed_sec);
+  // KPRINTF("agg_nosync_throughput: %lf ops/sec\n",agg_nosync_throughput);
+  // KPRINTF("avg_nosync_per_core_throughput: %lf ops/sec/core\n",avg_nosync_per_core_throughput);
+  // KPRINTF("agg_throughput: %lf ops/sec\n",agg_throughput);
+  // KPRINTF("avg_per_core_throughput: %lf ops/sec/core\n",avg_per_core_throughput);
+  // KPRINTF("agg_persist_throughput: %lf ops/sec\n",agg_persist_throughput);
+  // KPRINTF("avg_per_core_persist_throughput: %lf ops/sec/core\n",avg_per_core_persist_throughput);
+  // KPRINTF("avg_latency: %lf ms\n",avg_latency_ms);
+  // KPRINTF("avg_persist_latency: %lf ms\n",avg_persist_latency_ms);
+  // KPRINTF("agg_abort_rate: %lf aborts/sec\n",agg_abort_rate);
+  // KPRINTF("avg_per_core_abort_rate: %lf aborts/sec/core\n",avg_per_core_abort_rate);
   KPRINTF("txn breakdown : ");
   for (auto it = agg_txn_counts.begin(); it != agg_txn_counts.end(); ++it) {
-    KPRINTF("%d ,", it->second);
+    KPRINTF("%d ", it->second);
   }
   KPRINTF("\n");
-  KPRINTF("mycounts : \n");
-  for (auto it = workers.begin(); it != workers.end(); ++it) {
-    KPRINTF("MyCount = %ld\n", (*it)->getmycount());
-  }
+  //KPRINTF("mycounts : \n");
+  //for (auto it = workers.begin(); it != workers.end(); ++it) {
+  //  KPRINTF("MyCount = %ld\n", (*it)->getmycount());
+  //  }
+
+  KPRINTF("***DVFS RAPL COMMITS ELAPSED_SEC INSTRUCTIONS CYCLES LLC_MISS LLC_REF JOULES agg_tput agg_persist_tput avg_latency_ms avg_persist_latency_ms agg_abort_rate RDTSC_DIFF RDTSC_START RDTSC_END\n");
+  KPRINTF("+++0x%X %u %d %.2lf %llu %llu %llu %llu %.2lf %.2lf %.2lf %.2lf %.2lf %.2lf %llu %llu %llu\n",
+	  dvfs, rapl, n_commits,
+	  elapsed_sec, ninstructions,
+	  ncycles, nllc_miss, nllc_ref, joules,
+	  agg_throughput, agg_persist_throughput, avg_latency_ms,
+	  avg_persist_latency_ms, agg_abort_rate, rdtsc_end - rdtsc_start, rdtsc_start, rdtsc_end);
 }
 
 template <typename K, typename V>

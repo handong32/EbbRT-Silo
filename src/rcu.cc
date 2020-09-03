@@ -14,11 +14,21 @@
 //#include "thread.h"
 #include "counter.h"
 #include "lockguard.h"
+#include "benchmarks/extvar.h"
+#include <ebbrt/native/Perf.h>
+#include <ebbrt/native/Rapl.h>
+#include <ebbrt/native/Msr.h>
+
+#define IA32_MISC_ENABLE 0x1A0
+#define IA32_PERF_CTL    0x199
 
 #include <ebbrt/Debug.h>
 
 using namespace std;
 using namespace util;
+
+uint32_t dvfs = 0;
+uint32_t rapl = 0;
 
 rcu rcu::s_instance;
 
@@ -313,6 +323,27 @@ rcu::rcu()
   : syncs_()
 {
   ebbrt::kprintf_force("In rcu::rcu()\n");
+  //dvfs = 0x1d00;
+  dvfs = 0x1500;
+  rapl = 135;
+
+  for (uint32_t i = 0; i < static_cast<uint32_t>(ebbrt::Cpu::Count()); i++) {
+    ebbrt::event_manager->SpawnRemote(
+      [i] () mutable {
+	// disables turbo boost, thermal control circuit
+	ebbrt::msr::Write(IA32_MISC_ENABLE, 0x4000850081);
+	
+	// same p state as Linux with performance governor
+	ebbrt::msr::Write(IA32_PERF_CTL, dvfs);
+	if(i == 0 || i == 1) {
+	  auto pm = ebbrt::rapl::RaplCounter();
+	  pm.SetLimit(rapl);
+	}
+	ebbrt::kprintf_force("Core %u: dvfs=0x%X rapl=%u\n", i, dvfs, rapl);
+      }, i);
+  }
+  ebbrt::clock::SleepMilli(5000);
+  
   // XXX: these should really be instance members of RCU
   // we are assuming only one rcu object is ever created
   for (size_t i = 0; i < ::allocator::MAX_ARENAS; i++) {

@@ -14,7 +14,7 @@ add_executable(silo.elf src/varint.cc src/allocator.cc src/counter.cc src/core.c
   src/masstree/str.cc src/masstree/string.cc src/masstree/straccum.cc src/masstree/json.cc
   src/btree.cc src/tuple.cc src/txn_btree.cc src/txn.cc src/txn_proto2_impl.cc
   src/benchmarks/masstree/kvrandom.cc src/thread.cc
-  src/benchmarks/tpcc.cc src/benchmarks/bench.cc src/alarm.cc
+  src/benchmarks/tpcc.cc src/benchmarks/bench.cc
   src/silo.cc)
 
 add_custom_command(TARGET silo.elf POST_BUILD

@@ -104,8 +104,8 @@ void AppMain() {
   {
     argv[i] = (char*)strs[i].c_str();
     }*/
-  int argc = 8;
-  char *argv[argc] = {"silo.elf32", "--verbose", "--bench", "tpcc", "--num-threads", "15", "--scale-factor", "15"};
+  int argc = 7;
+  char *argv[argc] = {"silo.elf32", "--bench", "tpcc", "--num-threads", "15", "--scale-factor", "15"};
 
   
   while (1) {
@@ -250,7 +250,7 @@ void AppMain() {
     KPRINTF("system properties:\n");
     KPRINTF("  btree_internal_node_size: %d\n", concurrent_btree::InternalNodeSize());
     KPRINTF("  btree_leaf_node_size    : %d\n", concurrent_btree::LeafNodeSize());
-
+    
     test_fn(db);
   }
   else {
@@ -258,6 +258,6 @@ void AppMain() {
     ebbrt::kabort();
   }
 
-  KPRINTF("Finished running EbbRT-silo\n");
-  ebbrt::kabort();
+  //KPRINTF("Finished running EbbRT-silo\n");
+  //ebbrt::kabort();
 }

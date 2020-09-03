@@ -17,7 +17,13 @@
 
 #include <ebbrt/Debug.h>
 #include <ebbrt/native/Clock.h>
+#include <ebbrt/native/Rdtsc.h>
+#include <ebbrt/native/Perf.h>
+#include <ebbrt/native/Rapl.h>
 #include <ebbrt/Future.h>
+#include <ebbrt/native/Cpu.h>
+#include <ebbrt/EventManager.h>
+#include <ebbrt/native/Io.h>
 
 #define KPRINTF ebbrt::kprintf_force
 
@@ -157,6 +163,12 @@ public:
   inline size_t get_ntxn_commits() const { return ntxn_commits; }
   inline size_t get_ntxn_aborts() const { return ntxn_aborts; }
 
+  inline uint64_t get_instructions() { return ninstructions; }
+  inline uint64_t get_cycles() { return ncycles; }
+  inline uint64_t get_llc_ref() { return nllc_ref; }
+  inline uint64_t get_llc_miss() { return nllc_miss; }
+  inline double get_joules() { return joules; }
+
   inline uint64_t get_latency_numer_us() const { return latency_numer_us; }
 
   inline double
@@ -200,6 +212,12 @@ private:
   uint64_t latency_numer_us;
   unsigned backoff_shifts;
   long long int mycount{0};
+
+  uint64_t ninstructions;
+  uint64_t ncycles;
+  uint64_t nllc_ref;
+  uint64_t nllc_miss;
+  double joules;
   
 protected:
 
