@@ -28,17 +28,16 @@ public:
 
   ticker()
     : current_tick_(1), last_tick_inclusive_(0)
-  {
-    
-    //ebbrt::kprintf_force("In %s, tick_us=%ld do nothing\n", __FUNCTION__, tick_us);
-    
+  {       
     ebbrt::kprintf_force("In %s, tick_us=%ld\n", __FUNCTION__, tick_us);
 
     auto nts = ebbrt::Cpu::Count();
     auto tid = static_cast<size_t>(nts-1);
     ebbrt::event_manager->SpawnRemote(
       [this, tid]() {
+	// pinned to core 15
 	ebbrt::kprintf_force("SpawnRemote tickerloop in core %d\n", static_cast<int>(ebbrt::Cpu::GetMine()));
+	
 	// disables turbo boost, thermal control circuit
 	ebbrt::msr::Write(0x1A0, 0x4000850081);
 
@@ -62,18 +61,7 @@ public:
 
 	ebbrt::kprintf_force("Cpu=%u Sum=%llu Sum2=%llu\n", tid, sum, sum2);*/	
 	this->tickerloop();
-      }, tid);
-
-    //auto timeout = std::chrono::seconds(1);
-    //ebbrt::timer->Start(*this, timeout, true);
-  
-    //auto timeout = std::chrono::microseconds(tick_us);
-    //timer->Start(*this, timeout, true);
-    //ebbrt::kabort("In ticker()\n");
-    // TODOH
-    //std::thread thd(&ticker::tickerloop, this);
-    //thd.detach();
-    
+      }, tid);    
   }
 
   //void Fire() override;
@@ -233,27 +221,6 @@ private:
   void
   tickerloop()
   {
-    // runs as daemon
-    // bump the current tick
-    // XXX: ignore overflow
-    /*const uint64_t last_tick = util::non_atomic_fetch_add(current_tick_, 1UL);
-    const uint64_t cur_tick  = last_tick + 1;
-    
-    // wait for all threads to finish the last tick
-    for (size_t i = 0; i < ticks_.size(); i++) {
-      tickinfo &ti = ticks_[i];
-      const uint64_t thread_cur_tick =
-	ti.current_tick_.load(std::memory_order_acquire);
-      INVARIANT(thread_cur_tick == last_tick ||
-		thread_cur_tick == cur_tick);
-      if (thread_cur_tick == cur_tick)
-	continue;
-      lock_guard<spinlock> lg(ti.lock_);
-      ti.current_tick_.store(cur_tick, std::memory_order_release);
-    }
-    
-    last_tick_inclusive_.store(last_tick, std::memory_order_release);
-    */
     ebbrt::kprintf_force("tickerloop() START\n");
     
     util::timer loop_timer;
@@ -263,18 +230,6 @@ private:
       const uint64_t delay_time_usec = tick_us;
       if (last_loop_usec < delay_time_usec) {
         const uint64_t sleep_ns = (delay_time_usec - last_loop_usec) * 1000;
-	
-	//const uint64_t sleep_millis = (delay_time_usec - last_loop_usec) * 1000000
-	//uint32_t sleep_milli = static_cast<uint32_t>((delay_time_usec - last_loop_usec)*1000000);
-        //t.tv_sec  = sleep_ns / ONE_SECOND_NS;
-        //t.tv_nsec = sleep_ns % ONE_SECOND_NS;
-
-	// TODOH
-        //nanosleep(&t, nullptr);
-	//ebbrt::clock::SleepMilli(sleep_milli);	
-	//auto t1 = ebbrt::clock::Wall::Now();
-	//while ((ebbrt::clock::Wall::Now() - t1) < std::chrono::nanoseconds(sleep_ns)) {
-	//}
 	volatile uint64_t i;
 	while(i < sleep_ns) {
 	  i ++;
