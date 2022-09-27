@@ -334,7 +334,8 @@ ebbrt::Memcached::ProcessBinary(std::unique_ptr<IOBuf> buf,
     //KPRINTF("PROTOCOL_BINARY_CMD_GET\n");
     rhead->response.magic = PROTOCOL_BINARY_RES;
     dsiloexec[mycpu] += 1;
-    
+
+    // Do a random transaction on Silo DB
     auto worker = workers[mycpu];    
     auto workload = worker->get_workload();  
     double d = worker->get_r()->next_uniform();
