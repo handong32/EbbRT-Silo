@@ -135,18 +135,29 @@ void ebbrt::Memcached::Unimplemented(protocol_binary_request_header &h) {
   kbugon(true, "%s CMD IS UNSUPPORTED. ABORTING...\n", cmd);
 }
 
-void ebbrt::Memcached::Start(uint16_t port, std::vector<my_bench_worker*>& tworkers) {
+void ebbrt::Memcached::Start(uint16_t port) {
   listening_pcb_.Bind(port, [this](NetworkManager::TcpPcb pcb) {
-    // new connection callback
-    static std::atomic<size_t> cpu_index{0};
-    auto index = cpu_index.fetch_add(1) % ebbrt::Cpu::Count();
-    pcb.BindCpu(index);
-    auto connection = new TcpSession(this, std::move(pcb));
-    connection->Install();    
-  });
-  // set up silo
-  //KPRINTF("Start() tworkers = 0x%X tworkers[0]=0x%X\n", tworkers, tworkers[0]);
-  tworkers_ = tworkers;
+      // new connection callback
+      static std::atomic<size_t> cpu_index{0};
+      auto index = cpu_index.fetch_add(1) % (static_cast<size_t>(ebbrt::Cpu::Count())-1);
+      pcb.BindCpu(index);
+      
+      // hack - to pin all connections on core 0
+      //pcb.BindCpu(cpu_index.load(std::memory_order_relaxed));
+      
+      size_t mycore = static_cast<size_t>(ebbrt::Cpu::GetMine());
+      
+      // hack - pin connection to local core always
+      //pcb.BindCpu(mycore);
+      
+      uint64_t now = ebbrt::trace::rdtsc();
+      if(now > ixgbe_stats[mycore].rdtsc_start) {
+	ixgbe_stats[mycore].rdtsc_start = now;
+      }
+      
+      auto connection = new TcpSession(this, std::move(pcb));
+      connection->Install();    
+    });
 }
 
 void ebbrt::Memcached::TcpSession::Receive(std::unique_ptr<MutIOBuf> b) {
@@ -271,23 +282,6 @@ void ebbrt::Memcached::TcpSession::Receive(std::unique_ptr<MutIOBuf> b) {
       }
     }
   } // end while(buf_)
-
-  //silotpcc_exec_one(0);  
-  
-  /*auto worker = workers[0];
-  auto workload = worker->get_workload();
-  
-  double d = worker->get_r()->next_uniform();
-  KPRINTF("d = %lf\n", d);
-  for (size_t i = 0; i < workload.size(); i++) {
-    if ((i + 1) == workload.size() || d < workload[i].frequency) {
-      KPRINTF("frequency = %lf\n", workload[i].frequency);
-      workload[i].fn(worker);
-      break;
-    }
-    d -= workload[i].frequency;
-    }*/
-  
 	
   if (rbuf != nullptr) {
     Send(std::move(rbuf));
@@ -305,24 +299,8 @@ ebbrt::Memcached::ProcessBinary(std::unique_ptr<IOBuf> buf,
   uint32_t bodylen = 0;
   uint16_t status = 0;
   uint16_t mycpu = static_cast<uint16_t>(Cpu::GetMine());
-  
-  //KPRINTF("db=0x%X runner=0x%X workers = 0x%X\n", db, runner, workers);
-  //KPRINTF("Start() tworkers = 0x%X tworkers[0]=0x%X\n", tworkers_, tworkers_[0]);
-  auto worker = tworkers_[mycpu];
-  KPRINTF("CPU %u worker=0x%X ", mycpu, worker);
-//  KPRINTF("worker = 0x%X\n", worker);
-  auto workload = worker->get_workload();
-  
-  double d = worker->get_r()->next_uniform();
-  KPRINTF("d = %lf\n", d);
-  for (size_t i = 0; i < workload.size(); i++) {
-    if ((i + 1) == workload.size() || d < workload[i].frequency) {
-      //KPRINTF("frequency = %lf\n", workload[i].frequency);
-      workload[i].fn(worker);
-      break;
-    }
-    d -= workload[i].frequency;
-  }
+
+  dprocessbinary[mycpu] += 1;
   
   auto bdata = buf->GetDataPointer();
   // pull data from incoming header
@@ -335,23 +313,42 @@ ebbrt::Memcached::ProcessBinary(std::unique_ptr<IOBuf> buf,
   if (keylen > 0) {
     key = std::string(reinterpret_cast<const char *>(keyptr), keylen);
   }
-
+  
   // set response header defaults
   // we use magic as a signal to send or remaining quiet
   rhead->response.magic = 0;
   rhead->response.opcode = h.request.opcode;
   switch (h.request.opcode) {
-  case PROTOCOL_BINARY_CMD_SET:
-    //rhead->response.magic = PROTOCOL_BINARY_RES;
+  case PROTOCOL_BINARY_CMD_SET:    
+    rhead->response.magic = PROTOCOL_BINARY_RES;
   // no break
   case PROTOCOL_BINARY_CMD_SETQ:
-  //  Set(std::move((buf)), key);
-  //  return nullptr;
+    //KPRINTF("PROTOCOL_BINARY_CMD_SET\n");
+    //break;
+    //  Set(std::move((buf)), key);
+    return nullptr;
   case PROTOCOL_BINARY_CMD_GET:
   case PROTOCOL_BINARY_CMD_GETQ:
   case PROTOCOL_BINARY_CMD_GETK:
-  case PROTOCOL_BINARY_CMD_GETKQ:
+  case PROTOCOL_BINARY_CMD_GETKQ: {
+    //KPRINTF("PROTOCOL_BINARY_CMD_GET\n");
     rhead->response.magic = PROTOCOL_BINARY_RES;
+    dsiloexec[mycpu] += 1;
+    
+    auto worker = workers[mycpu];    
+    auto workload = worker->get_workload();  
+    double d = worker->get_r()->next_uniform();
+    dsum[mycpu] += d;
+    for (size_t i = 0; i < workload.size(); i++) {
+      dworkerloop[mycpu] += 1;
+      if ((i + 1) == workload.size() || d < workload[i].frequency) {
+	workload[i].fn(worker);
+	break;
+      }
+      dfreqsum[mycpu] += workload[i].frequency;
+      d -= workload[i].frequency;
+    }
+    
     // binary() returns <ext, key, value>
     rhead->response.extlen = sizeof(uint32_t);
     res = Get(std::move((buf)), key);
@@ -362,7 +359,7 @@ ebbrt::Memcached::ProcessBinary(std::unique_ptr<IOBuf> buf,
       bodylen += kv->ComputeChainDataLength();
     } else {
       // Miss
-      ebbrt::kprintf_force("GET MISS\n");
+      //ebbrt::kprintf_force("GET MISS\n");
       if (h.request.opcode == PROTOCOL_BINARY_CMD_GETQ ||
           h.request.opcode == PROTOCOL_BINARY_CMD_GETKQ) {
         // If GETQ/GETKQ we send no response
@@ -376,20 +373,24 @@ ebbrt::Memcached::ProcessBinary(std::unique_ptr<IOBuf> buf,
       status = PROTOCOL_BINARY_RESPONSE_KEY_ENOENT;
     }
     break;
-  case PROTOCOL_BINARY_CMD_NOOP:
+  }
   case PROTOCOL_BINARY_CMD_QUIT:
+    KPRINTF("PROTOCOL_BINARY_CMD_QUIT\n");
     Quit();
     break;
   case PROTOCOL_BINARY_CMD_QUITQ:
+    KPRINTF("PROTOCOL_BINARY_CMD_QUITQ\n");
     Quit();
     return nullptr;
   case PROTOCOL_BINARY_CMD_FLUSH:
+    KPRINTF("PROTOCOL_BINARY_CMD_FLUSH\n");
     rhead->response.magic = PROTOCOL_BINARY_RES;
     keylen = 0;
     rhead->response.extlen = 0;
     Flush();
     break;
   case PROTOCOL_BINARY_CMD_FLUSHQ:
+    KPRINTF("PROTOCOL_BINARY_CMD_FLUSHQ\n");
     Flush();
     return nullptr;
   default:

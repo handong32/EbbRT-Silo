@@ -14,6 +14,8 @@
 #include <ebbrt/native/Clock.h>
 #include <ebbrt/EventManager.h>
 #include <ebbrt/Timer.h>
+#include <ebbrt/native/IxgbeDriver.h>
+#include <ebbrt/native/Msr.h>
 
 class ticker {//: public ebbrt::Timer::Hook {
 public:
@@ -27,16 +29,40 @@ public:
   ticker()
     : current_tick_(1), last_tick_inclusive_(0)
   {
+    
+    //ebbrt::kprintf_force("In %s, tick_us=%ld do nothing\n", __FUNCTION__, tick_us);
+    
     ebbrt::kprintf_force("In %s, tick_us=%ld\n", __FUNCTION__, tick_us);
 
     auto nts = ebbrt::Cpu::Count();
     auto tid = static_cast<size_t>(nts-1);
-
     ebbrt::event_manager->SpawnRemote(
-      [this]() {
-      ebbrt::kprintf_force("SpawnRemote tickerloop in core %d\n", static_cast<int>(ebbrt::Cpu::GetMine()));
-      this->tickerloop();
-    }, tid);
+      [this, tid]() {
+	ebbrt::kprintf_force("SpawnRemote tickerloop in core %d\n", static_cast<int>(ebbrt::Cpu::GetMine()));
+	// disables turbo boost, thermal control circuit
+	ebbrt::msr::Write(0x1A0, 0x4000850081);
+
+	// should only do this when in polling mode
+	//ebbrt::msr::Write(0x199, 0x1D00);
+
+	// same p state as Linux with powersave governor, linux default
+	ebbrt::msr::Write(0x199, 0xC00);
+
+	/*uint64_t ii, jj, sum=0, sum2=0;
+	for(ii=0;ii<15;ii++) {
+	  for(jj=0;jj<IXGBE_LOG_SIZE;jj++) {
+	    sum += ixgbe_logs[ii][jj].Fields.tsc;
+	  }
+	  
+	  uint8_t* ptr = bsendbufs[ii]->MutData();
+	  for(jj=0;jj<IXGBE_MAX_DATA_PER_TXD;jj++) {
+	    sum2 += ptr[ii];
+	  }
+	}
+
+	ebbrt::kprintf_force("Cpu=%u Sum=%llu Sum2=%llu\n", tid, sum, sum2);*/	
+	this->tickerloop();
+      }, tid);
 
     //auto timeout = std::chrono::seconds(1);
     //ebbrt::timer->Start(*this, timeout, true);
@@ -228,24 +254,31 @@ private:
     
     last_tick_inclusive_.store(last_tick, std::memory_order_release);
     */
+    ebbrt::kprintf_force("tickerloop() START\n");
+    
     util::timer loop_timer;
     //struct timespec t;
     for (;;) {
-
       const uint64_t last_loop_usec = loop_timer.lap();
       const uint64_t delay_time_usec = tick_us;
       if (last_loop_usec < delay_time_usec) {
         const uint64_t sleep_ns = (delay_time_usec - last_loop_usec) * 1000;
+	
 	//const uint64_t sleep_millis = (delay_time_usec - last_loop_usec) * 1000000
 	//uint32_t sleep_milli = static_cast<uint32_t>((delay_time_usec - last_loop_usec)*1000000);
         //t.tv_sec  = sleep_ns / ONE_SECOND_NS;
         //t.tv_nsec = sleep_ns % ONE_SECOND_NS;
+
 	// TODOH
         //nanosleep(&t, nullptr);
-	//ebbrt::clock::SleepMilli(sleep_milli);
-	auto t1 = ebbrt::clock::Wall::Now();
-	while ((ebbrt::clock::Wall::Now() - t1) < std::chrono::nanoseconds(sleep_ns)) {
-	}
+	//ebbrt::clock::SleepMilli(sleep_milli);	
+	//auto t1 = ebbrt::clock::Wall::Now();
+	//while ((ebbrt::clock::Wall::Now() - t1) < std::chrono::nanoseconds(sleep_ns)) {
+	//}
+	volatile uint64_t i;
+	while(i < sleep_ns) {
+	  i ++;
+	}	
         loop_timer.lap(); // since we slept away the lag
       }
 

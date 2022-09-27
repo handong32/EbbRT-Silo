@@ -32,6 +32,16 @@
 
 using namespace util;
 using namespace std;
+extern double dsum[16];
+extern double dfreqsum[16];
+extern long long dworkerloop[16];
+extern long long dprocessbinary[16];
+extern long long dsiloexec[16];
+/*extern uint64_t dins[16];
+extern uint64_t dcyc[16];
+extern uint64_t drefcyc[16];
+extern uint64_t dllcmiss[16];*/
+
 
   // These are hacks to access protected members of classes defined in silo
 class tpcc_bench_runner : public bench_runner
@@ -78,13 +88,13 @@ public:
 
 static abstract_db *db;
 static my_bench_runner *runner;
-static vector<my_bench_worker *> workers;
+extern vector<my_bench_worker *> workers;
 
 namespace ebbrt {
 class Memcached : public StaticSharedEbb<Memcached>, public CacheAligned {
 public:
   Memcached();
-  void Start(uint16_t port, std::vector<my_bench_worker*>& tworkers);
+  void Start(uint16_t port);
 
 private:
   /**
@@ -126,7 +136,13 @@ private:
   public:
     TcpSession(Memcached *mcd, ebbrt::NetworkManager::TcpPcb pcb)
         : ebbrt::TcpHandler(std::move(pcb)), mcd_(mcd) {}
-    void Close() {}
+    void Close() {
+      uint32_t mycore = static_cast<uint32_t>(ebbrt::Cpu::GetMine());      
+      uint64_t now = ebbrt::trace::rdtsc();
+      if(ixgbe_stats[mycore].rdtsc_end == 0) {
+	ixgbe_stats[mycore].rdtsc_end = now;
+      }      
+    }
     void Abort() {}
     void Receive(std::unique_ptr<MutIOBuf> b);
 
@@ -148,7 +164,6 @@ private:
   RcuHashTable<TableEntry, std::string, &TableEntry::hook, &TableEntry::key>
       table_{13}; // 8k buckets
   ebbrt::SpinLock table_lock_;
-  std::vector<my_bench_worker*> tworkers_;
     
   // fixme: below two are binary specific.. for now
   void Nop(protocol_binary_request_header &);
